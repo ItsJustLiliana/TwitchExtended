@@ -1,8 +1,8 @@
 (()=>{
-  const labels={vaft:'VAFT Adblock',rewind:'Twitch Rewind',bttv:'BetterTTV',promos:'Ad-Free / Turbo verbergen',background:'Achtergrondaudio',pip:'Picture-in-Picture',desktop:'Desktopweergave'};
+  const labels={vaft:'VAFT Adblock',rewind:'Twitch Rewind',bttv:'BetterTTV',promos:'Ad-Free / Turbo verbergen',background:'Achtergrondaudio',pip:'Picture-in-Picture',desktop:'Desktopweergave',pinnedMessages:'Vastgepinde moderatorberichten'};
   let timer=0;
   window.__te.openSettings=()=>{
-    if(window.BetterTTV?.openSettings){window.BetterTTV.openSettings();return;}
+    // Twitch Extended settings remain available with BTTV enabled.
     if(document.getElementById('te-settings-dialog'))return;
     const backdrop=document.createElement('div');backdrop.id='te-settings-dialog';
     backdrop.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
