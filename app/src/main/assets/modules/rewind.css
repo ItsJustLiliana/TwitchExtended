@@ -1,0 +1,226 @@
+/* Twitch Rewind — Pixel-Perfect Native UI Integration */
+/* Matches Twitch's native player controls layout exactly */
+
+/* --- VOD video (positioned over Twitch's native video) --- */
+.tr-vod-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* --- Seekbar area (injected above native button row) --- */
+.tr-seekbar-area {
+  padding: 0 16px;
+  user-select: none;
+}
+
+/* Top row: [elapsed time] ... [LIVE] */
+.tr-seekbar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+}
+
+.tr-elapsed {
+  font-family: Inter, 'Noto Sans Arabic', Roobert, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: #fff;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* LIVE label, Twitch's two looks. While rewinding: the dark "LIVE ⏭" pill
+   that jumps back to live. At the live edge: the red status badge, not
+   clickable. Both are one text line high, so switching never resizes the
+   control bar (the badge is right-aligned, so its width can change) */
+.tr-live-label {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 19.6px;
+  padding: 0 4px;
+  margin: 0;
+  border: none;
+  border-radius: 4px;
+  background: #323239;
+  color: #efeff1;
+  cursor: pointer;
+  outline: none;
+}
+
+.tr-live-text {
+  font-family: Inter, 'Noto Sans Arabic', Roobert, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: inherit;
+}
+
+.tr-live-label svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
+.tr-live-label--at-live {
+  padding: 1px 5px;
+  background: #eb0400;
+  color: #fff;
+  cursor: default;
+  pointer-events: none;
+}
+
+.tr-live-label--at-live .tr-live-text {
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.tr-live-label--at-live svg {
+  display: none;
+}
+
+/* Bottom row: [seekbar] [red dot] */
+.tr-seekbar-row {
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+
+/* --- Seekbar (matches native .seekbar-interaction-area) --- */
+.tr-seekbar {
+  position: relative;
+  flex: 1;
+  padding: 8px 0;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  box-sizing: content-box;
+  height: 4px;
+}
+
+/* Track (matches native .seekbar-bar) */
+.tr-seekbar-track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+}
+
+/* Played/filled portion (the purple of Twitch's own rewind seekbar) */
+.tr-seekbar-played {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 4px;
+  background: #a970ff;
+  pointer-events: none;
+}
+
+/* Scrubber thumb: shown only while hovering or dragging, like Twitch's */
+.tr-seekbar-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
+  top: 50%;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tr-seekbar:hover .tr-seekbar-thumb,
+.tr-seekbar--active .tr-seekbar-thumb {
+  opacity: 1;
+}
+
+.tr-seekbar--live .tr-seekbar-thumb {
+  opacity: 0 !important;
+}
+
+/* Hover tooltip (Twitch's balloon: it sits right on the bar's row) */
+.tr-seekbar-tooltip {
+  position: absolute;
+  bottom: 100%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6), 0 0 4px rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-family: Inter, 'Noto Sans Arabic', Roobert, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+  padding: 0 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  display: none;
+  user-select: none;
+  text-align: center;
+}
+
+.tr-seekbar:hover .tr-seekbar-tooltip {
+  display: block;
+}
+
+/* Preview frame above the time (when the browser has WebCodecs).
+   Two classes: Twitch's `.video-player canvas` rule (absolute, 100% size)
+   would otherwise squash it into the tooltip */
+.tr-seekbar-tooltip .tr-seekbar-preview {
+  display: none;
+  position: static;
+  width: 160px;
+  height: 90px;
+  margin-top: 4px;
+  border-radius: 3px;
+  background: #000;
+  transition: opacity 0.15s ease;
+}
+
+.tr-seekbar-tooltip--preview .tr-seekbar-preview {
+  display: block;
+}
+
+/* Segment still loading: keep the previous frame, dimmed */
+.tr-seekbar-tooltip--loading .tr-seekbar-preview {
+  opacity: 0.35;
+}
+
+/* --- Red live dot (end of seekbar row, only while rewinding, like Twitch's) --- */
+.tr-live-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  margin-left: 8px;
+  border: none;
+  background: transparent;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.tr-seekbar--live + .tr-live-dot {
+  display: none;
+}
+
+.tr-live-dot-indicator {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #eb0400;
+}

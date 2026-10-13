@@ -1,0 +1,552 @@
+﻿diff --git a/src/constants.js b/src/constants.js
+index 3ba132e..b6ac117 100644
+--- a/src/constants.js
++++ b/src/constants.js
+@@ -274,7 +274,7 @@ export const SettingsPrompts = {
+ };
+ 
+ /** Default Mantine `theme.primaryColor` key when unset or invalid. */
+-export const DEFAULT_PRIMARY_COLOR = 'red';
++export const DEFAULT_PRIMARY_COLOR = 'violet';
+ 
+ export const SettingDefaultValues = {
+   [SettingIds.ANON_CHAT]: false,
+diff --git a/src/index.js b/src/index.js
+index c93c7f4..16cd662 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -7,7 +7,11 @@ import '@mantine/core/styles.css';
+   if (window.location.pathname.endsWith('.html')) return;
+   if (
+     ![
++      'localhost',
++      '127.0.0.1',
+       'www.twitch.tv',
++      'm.twitch.tv',
++      'twitch.tv',
+       'canary.twitch.tv',
+       'release.twitch.tv',
+       'clips.twitch.tv',
+@@ -44,7 +48,7 @@ import '@mantine/core/styles.css';
+     await loadI18n();
+ 
+     const {default: extension} = await import('@/utils/extension');
+-    await extension.setCurrentScript(currentScript);
++    await extension.setCurrentScript({src: "https://cdn.betterttv.net/betterttv.js"});
+ 
+     const {default: globalCSS} = await import('@/modules/global_css/index');
+     const globalCSSLoadPromise = globalCSS.loadGlobalCSS();
+@@ -59,18 +63,28 @@ import '@mantine/core/styles.css';
+     const {importAll} = await import('@/utils/modules');
+     await importAll(import.meta.glob('./modules/**/index.{js,jsx}'));
+ 
++    const hostSettings=(await import('./settings')).default;
++    if(!localStorage.getItem('te-system-theme-v1')){hostSettings.set('autoThemeMode',true);localStorage.setItem('te-system-theme-v1','1');}
++    const syncSystemTheme=()=>{if(hostSettings.get('autoThemeMode'))hostSettings.set('darkenedMode',window.__te?.config?.systemDark ?? matchMedia('(prefers-color-scheme: dark)').matches,true);};
++    syncSystemTheme();window.addEventListener('te-system-theme',syncSystemTheme);matchMedia('(prefers-color-scheme: dark)').addEventListener('change',syncSystemTheme);hostSettings.on('changed.autoThemeMode',syncSystemTheme);
+     watcher.setup();
+ 
+     debug.log(`BetterTTV v${EXT_VER} loaded. ${NODE_ENV} @ ${GIT_REV}`);
+ 
+     window.BetterTTV = {
+       version: EXT_VER,
++      chatTools: {
++        deleted: await (await import('@/modules/chat_deleted_messages/index')).default,
++        split: await (await import('@/modules/split_chat/index')).default,
++      },
++      openSettings: (...args) => import("@/modules/settings/index").then(m => m.default.openSettings(...args)),
+       settings: (await import('./settings')).default,
+       emoteMenu: (await import('@/common/api/emote-menu')).default,
+       watcher: {
+         emitLoad: (name) => watcher.emit(`load.${name}`),
+       },
+     };
++    window.dispatchEvent(new Event('te-bttv-ready'));
+   } catch (e) {
+     Sentry.captureException(e);
+   }
+diff --git a/src/modules/chat_deleted_messages/index.js b/src/modules/chat_deleted_messages/index.js
+index 9e16b92..7e848f0 100644
+--- a/src/modules/chat_deleted_messages/index.js
++++ b/src/modules/chat_deleted_messages/index.js
+@@ -40,7 +40,10 @@ class ChatDeletedMessagesModule {
+     domObserver.on('.chat-line__message--deleted-notice', (node, isConnected) => {
+       if (!isConnected) return;
+ 
+-      const messageRenderer = twitch.getChatMessageRenderer(node);
++      // Mobile Twitch nests the placeholder fourteen fibres below the renderer.
++      // The containing chat line is only two fibres below it; retain the original
++      // renderer lookup and deletion behavior by starting there.
++      const messageRenderer = twitch.getChatMessageRenderer(node.closest(CHAT_LINE_SELECTOR) || node);
+       if (messageRenderer == null) {
+         return;
+       }
+diff --git a/src/modules/chat_deleted_messages/style.css b/src/modules/chat_deleted_messages/style.css
+index 5781e42..b2cc19a 100644
+--- a/src/modules/chat_deleted_messages/style.css
++++ b/src/modules/chat_deleted_messages/style.css
+@@ -1,3 +1,5 @@
+ .bttv-chat-line-deleted {
+   opacity: 0.5;
+ }
++
++.bttv-chat-line-deleted.bttv-highlighted { opacity: 1; background-color: rgba(255, 0, 0, 0.3) !important; }
+diff --git a/src/modules/global_css/index.js b/src/modules/global_css/index.js
+index 62408db..c6218d0 100644
+--- a/src/modules/global_css/index.js
++++ b/src/modules/global_css/index.js
+@@ -21,15 +21,8 @@ class GlobalCSSModule {
+       return Promise.resolve();
+     }
+ 
+-    return new Promise((resolve, reject) => {
+-      const css = document.createElement('link');
+-      css.setAttribute('href', extensionCSSUrl);
+-      css.setAttribute('type', 'text/css');
+-      css.setAttribute('rel', 'stylesheet');
+-      css.addEventListener('load', () => resolve());
+-      css.addEventListener('error', (err) => reject(err));
+-      document.body.appendChild(css);
+-    });
++    return Promise.resolve(); // CSS is bundled and injected by the Android host.
++
+   }
+ }
+ 
+diff --git a/src/modules/settings/components/SettingSwitch.jsx b/src/modules/settings/components/SettingSwitch.jsx
+index 2fc63a4..6461833 100644
+--- a/src/modules/settings/components/SettingSwitch.jsx
++++ b/src/modules/settings/components/SettingSwitch.jsx
+@@ -9,6 +9,7 @@ function SettingSwitch({name, description, value, onChange, disabled, ...props})
+       <Switch
+         classNames={{body: styles.switchBody}}
+         size="xl"
++        aria-label={typeof name === 'string' ? name : undefined}
+         checked={value}
+         onChange={({target}) => onChange(target.checked)}
+         disabled={disabled}
+diff --git a/src/modules/settings/components/SettingWrapper.module.css b/src/modules/settings/components/SettingWrapper.module.css
+index 5570f46..2df2c2e 100644
+--- a/src/modules/settings/components/SettingWrapper.module.css
++++ b/src/modules/settings/components/SettingWrapper.module.css
+@@ -10,6 +10,8 @@
+ }
+ 
+ .text {
++  min-width: 0;
++  flex: 1;
+   display: flex;
+   flex-direction: column;
+   gap: 4px;
+@@ -18,6 +20,7 @@
+ }
+ 
+ .title {
++  overflow-wrap: anywhere;
+   margin: 0;
+   display: flex;
+   align-items: center;
+@@ -33,3 +36,5 @@
+     width: 100%;
+   }
+ }
++
++.control { flex-shrink: 0; }
+diff --git a/src/modules/settings/components/SettingsModal.jsx b/src/modules/settings/components/SettingsModal.jsx
+index 6d72f63..ae226ab 100644
+--- a/src/modules/settings/components/SettingsModal.jsx
++++ b/src/modules/settings/components/SettingsModal.jsx
+@@ -139,7 +139,7 @@ function SettingsModal({setHandleOpen}) {
+       if (isOpen) {
+         modalHandlers.open();
+         // Nudge signed-out users to sign in the first time they open settings.
+-        maybePromptSignIn();
++        // No automatic sign-in prompt in the Android settings hub.
+       } else {
+         modalHandlers.close();
+       }
+@@ -178,7 +178,7 @@ function SettingsModal({setHandleOpen}) {
+   return (
+     <Modal
+       size="xl"
+-      radius="lg"
++      radius="md"
+       centered
+       withinPortal={false}
+       fullScreen={width < 800}
+diff --git a/src/modules/settings/components/SideNavigation.jsx b/src/modules/settings/components/SideNavigation.jsx
+index 46f0e2a..e22aa2e 100644
+--- a/src/modules/settings/components/SideNavigation.jsx
++++ b/src/modules/settings/components/SideNavigation.jsx
+@@ -231,13 +231,6 @@ function SideNavigation({open, setOpen}) {
+           })}
+         </Scrollbar>
+         <div className={styles.userSettingsContainer}>
+-          <NavigationButton
+-            className={classNames(clickableStyles.clickableContainer, styles.categoryButton)}
+-            active={page === PageTypes.PRO_HOME}
+-            onClick={() => handleNavigate(PageTypes.PRO_HOME)}
+-            label={formatMessage({defaultMessage: 'BetterTTV Pro'})}>
+-            <Icon icon={faFire} className={classNames(styles.navigationIcon, styles.fireIcon)} />
+-          </NavigationButton>
+           <UserSettingsNavigationButton
+             active={page === PageTypes.USER_SETTINGS}
+             onClick={() => handleNavigate(PageTypes.USER_SETTINGS)}
+diff --git a/src/modules/settings/pages/Settings.jsx b/src/modules/settings/pages/Settings.jsx
+index 59f0207..adf9b0d 100644
+--- a/src/modules/settings/pages/Settings.jsx
++++ b/src/modules/settings/pages/Settings.jsx
+@@ -1,6 +1,6 @@
+-import {Text, Button} from '@mantine/core';
++import {Text, Button, TextInput, Switch} from '@mantine/core';
+ import {useInView} from 'framer-motion';
+-import React, {use, useCallback, useEffect, useMemo, useRef} from 'react';
++import React, {use, useCallback, useEffect, useMemo, useRef, useState} from 'react';
+ import useScrollSpy from '@/common/hooks/ScrollSpy';
+ import formatMessage from '@/i18n/index';
+ import PageHeader from '@/modules/settings/components/PageHeader';
+@@ -8,6 +8,7 @@ import PageScrollBody, {PageScrollContext} from '@/modules/settings/components/P
+ import Panel from '@/modules/settings/components/Panel';
+ import {orderSettingsByCategory} from '@/modules/settings/setting-categories';
+ import promotionStore from '@/modules/settings/stores/promotion-store';
++import SettingSwitch from '@/modules/settings/components/SettingSwitch';
+ import SettingStore from '@/modules/settings/stores/setting-store';
+ import useSettingsNavigationStore from '@/modules/settings/stores/settings-navigation';
+ import extension from '@/utils/extension';
+@@ -75,11 +76,19 @@ const SettingsList = React.memo(function SettingsList({settings, handleSettingRe
+   }
+ 
+   return settings.map((setting) => (
+-    <SettingPanel key={setting.settingPanelId} setting={setting} onRef={handleSettingRefCallback} />
++    <div key={setting.settingPanelId} data-te-searchable="betterttv"><SettingPanel setting={setting} onRef={handleSettingRefCallback} /></div>
+   ));
+ });
+ 
+ function Settings({handleSettingRefCallback}) {
++  const [search,setSearch]=useState('');
++  const searchRoot=useRef(null);
++  useEffect(()=>{
++    searchRoot.current?.querySelectorAll('[data-te-searchable]').forEach(el=>{
++      const content=(el.textContent+' '+el.dataset.teSearchable).toLowerCase();
++      el.style.display=content.includes(search.trim().toLowerCase())?'':'none';
++    });
++  },[search]);
+   const settings = useMemo(() => orderSettingsByCategory(SettingStore.getSupportedSettings()), []);
+   const scrollRef = use(PageScrollContext);
+   const setActivePanelId = useSettingsNavigationStore((state) => state.setActivePanelId);
+@@ -115,8 +124,15 @@ function Settings({handleSettingRefCallback}) {
+   });
+ 
+   return (
+-    <PageScrollBody header={<PageHeader leftContent={formatMessage({defaultMessage: 'Settings'})} />}>
+-      <SettingsList settings={settings} handleSettingRefCallback={handleSettingRef} />
++    <PageScrollBody header={<div><PageHeader leftContent="Twitch Extended" /><div style={{padding:'0 16px 12px'}}><TextInput size="lg" aria-label="Zoek instellingen" placeholder="Zoek instellingen" value={search} onChange={e=>setSearch(e.currentTarget.value)} /></div></div>}>
++      <div ref={searchRoot}>
++        <div style={{background:'var(--mantine-color-body-raised)',color:'var(--mantine-color-text)',border:'1px solid var(--mantine-color-default-border)',borderRadius:6,padding:0,marginBottom:20}}>
++          <Text size="lg" fw={700} style={{padding:'20px 20px 8px'}}>Extensies en afspelen</Text>
++          <Text size="lg" c="dimmed" style={{padding:'0 20px 12px'}}>Wijzigingen herladen Twitch om de extensies veilig aan of uit te zetten.</Text>
++          {Object.entries({vaft:'VAFT Adblock',rewind:'Twitch Rewind',bttv:'BetterTTV',promos:'Ad-Free / Turbo verbergen',background:'Achtergrondaudio',pip:'Picture-in-Picture',desktop:'Desktopweergave'}).map(([id,label])=><div key={id} data-te-searchable={id}><SettingSwitch name={label} value={window.__te?.config?.[id]??['vaft','rewind','bttv','promos','pip'].includes(id)} onChange={value=>window.__te?.setSetting(id,value)} /></div>)}
++        </div>
++        <SettingsList settings={settings} handleSettingRefCallback={handleSettingRef} />
++      </div>
+     </PageScrollBody>
+   );
+ }
+diff --git a/src/modules/settings/pages/UserSettings.jsx b/src/modules/settings/pages/UserSettings.jsx
+index 540b899..c69d8cb 100644
+--- a/src/modules/settings/pages/UserSettings.jsx
++++ b/src/modules/settings/pages/UserSettings.jsx
+@@ -161,7 +161,7 @@ function UserSettings() {
+     <PageScrollBody header={<PageHeader leftContent={formatMessage({defaultMessage: 'User Settings'})} />}>
+       <SignInAlert />
+       <SettingGroup name={formatMessage({defaultMessage: 'Extension'})}>
+-        <CloudBackupSetting />
++        
+         <BackupSetting
+           description={formatMessage({defaultMessage: 'Download a copy of your settings to a JSON file.'})}
+           disabled={resetting}
+diff --git a/src/modules/settings/settings/twitch/Theme.jsx b/src/modules/settings/settings/twitch/Theme.jsx
+index 179ac0c..6c97107 100644
+--- a/src/modules/settings/settings/twitch/Theme.jsx
++++ b/src/modules/settings/settings/twitch/Theme.jsx
+@@ -15,11 +15,8 @@ function Theme({ref, ...props}) {
+   const [autoThemeValue, setAutoThemeValue] = useStorageState(SettingIds.AUTO_THEME_MODE);
+   const [themeColorValue, setThemeColorValue] = useStorageState(SettingIds.PRIMARY_COLOR);
+ 
+-  const [normalizedThemeColorValue, setNormalizedThemeColorValue] = useProRequiredState({
+-    value: themeColorValue,
+-    setValue: setThemeColorValue,
+-    defaultValue: SettingDefaultValues[SettingIds.PRIMARY_COLOR],
+-  });
++  const normalizedThemeColorValue=themeColorValue;
++  const setNormalizedThemeColorValue=setThemeColorValue;
+ 
+   return (
+     <SettingGroup ref={ref} {...props} name={SETTING_NAME}>
+@@ -39,7 +36,6 @@ function Theme({ref, ...props}) {
+         onChange={setAutoThemeValue}
+       />
+       <SettingPrimaryColorRadio
+-        showProBadge
+         value={normalizedThemeColorValue}
+         onChange={setNormalizedThemeColorValue}
+         name={formatMessage({defaultMessage: 'Accent Color'})}
+diff --git a/src/modules/settings/stores/setting-store.js b/src/modules/settings/stores/setting-store.js
+index 16a15a9..50d0b0e 100644
+--- a/src/modules/settings/stores/setting-store.js
++++ b/src/modules/settings/stores/setting-store.js
+@@ -86,7 +86,8 @@ class SettingStore {
+   }
+ 
+   getSupportedSettings() {
+-    const settings = Object.values(this.settings);
++    const hidden=new Set(['subscriptionBadge','usernameEffect','usernameHoverEffect','chatbots','selfBot']);
++    const settings = Object.values(this.settings).filter(s=>!hidden.has(s.settingPanelId));
+ 
+     if (isStandaloneWindow()) {
+       return settings.filter((setting) => setting.supportsStandaloneWindow);
+diff --git a/src/modules/settings/twitch/Settings.jsx b/src/modules/settings/twitch/Settings.jsx
+index 2c29973..203a353 100644
+--- a/src/modules/settings/twitch/Settings.jsx
++++ b/src/modules/settings/twitch/Settings.jsx
+@@ -41,7 +41,8 @@ export default class SettingsModule {
+     shadowDOM.mount(ShadowDOMComponentIds.SETTINGS_MENU, <Modal setHandleOpen={setHandleOpen} />);
+   }
+ 
+-  renderSettingsMenuOption() {
++  renderSettingsMenuOption() { return; // Shared Android navigation owns the settings entry.
++
+     if (document.querySelector('.bttvSettingsIconDropDown') != null) return;
+ 
+     const settingsDropDown = document
+@@ -99,7 +100,8 @@ export default class SettingsModule {
+     dropdownIconAspect.appendChild(bttvSettingsIconDropDown);
+   }
+ 
+-  renderTopNavButton() {
++  renderTopNavButton() { return; // Shared Android navigation owns the settings entry.
++
+     const iconRow = document.querySelector(`${TOP_NAV_MENU_SELECTOR} > *:has(${TOP_NAV_USER_MENU_SELECTOR})`);
+     if (iconRow == null) {
+       return;
+diff --git a/src/modules/shadow_dom/ThemeProvider.jsx b/src/modules/shadow_dom/ThemeProvider.jsx
+index 2d8f2c3..e392881 100644
+--- a/src/modules/shadow_dom/ThemeProvider.jsx
++++ b/src/modules/shadow_dom/ThemeProvider.jsx
+@@ -23,7 +23,7 @@ import {
+ } from '@mantine/core';
+ import {useMounted} from '@mantine/hooks';
+ import {ModalsProvider} from '@mantine/modals';
+-import React, {useMemo, useRef} from 'react';
++import React, {useMemo, useRef, useState, useEffect} from 'react';
+ import {LoaderIconError, LoaderIconIndicator, LoaderIconSuccess} from '@/common/components/LoaderIcon';
+ import {PortalContext} from '@/common/contexts/PortalContext';
+ import useProRequiredState from '@/common/hooks/ProRequiredState';
+@@ -239,14 +239,14 @@ export const theme = mergeMantineTheme(DEFAULT_THEME, mantineTheme);
+ 
+ function ThemeProvider({children, ...props}) {
+   const [dark] = useStorageState(SettingIds.DARKENED_MODE);
++  const [autoTheme]=useStorageState(SettingIds.AUTO_THEME_MODE);
++  const [systemDark,setSystemDark]=useState(()=>window.__te?.config?.systemDark ?? matchMedia('(prefers-color-scheme: dark)').matches);
++  useEffect(()=>{const media=matchMedia('(prefers-color-scheme: dark)');const sync=()=>setSystemDark(window.__te?.config?.systemDark ?? media.matches);media.addEventListener('change',sync);window.addEventListener('te-system-theme',sync);return()=>{media.removeEventListener('change',sync);window.removeEventListener('te-system-theme',sync);};},[]);
+   const [primaryColor] = useStorageState(SettingIds.PRIMARY_COLOR);
+   const portalRef = useRef();
+   const isMounted = useMounted();
+ 
+-  const [normalizedPrimaryColor] = useProRequiredState({
+-    value: primaryColor,
+-    defaultValue: DEFAULT_PRIMARY_COLOR,
+-  });
++  const normalizedPrimaryColor=primaryColor;
+ 
+   const modifiedTheme = useMemo(() => {
+     if (normalizedPrimaryColor == null) {
+@@ -259,7 +259,7 @@ function ThemeProvider({children, ...props}) {
+   return (
+     <PortalContext value={portalRef}>
+       <MantineProvider
+-        forceColorScheme={dark ? 'dark' : 'light'}
++        forceColorScheme={(autoTheme?systemDark:dark) ? 'dark' : 'light'}
+         classNamesPrefix="bttv-mantine-"
+         theme={modifiedTheme}
+         withCssVariables={false}
+diff --git a/src/modules/shadow_dom/index.jsx b/src/modules/shadow_dom/index.jsx
+index fa7fe5f..82c767a 100644
+--- a/src/modules/shadow_dom/index.jsx
++++ b/src/modules/shadow_dom/index.jsx
+@@ -44,7 +44,7 @@ function reparentHost(parent) {
+   // re-loads it (its `load` re-fires), so hide the UI across the move and let the reveal-on-load
+   // bring it back once styled. Otherwise it flashes unstyled (e.g. a giant emote menu, or the
+   // autocomplete leaking over the video).
+-  mountNode.style.display = 'none';
++  mountNode.style.display = '';
+   parent.appendChild(host);
+ }
+ 
+@@ -65,7 +65,7 @@ function syncHostToFullscreen() {
+ }
+ 
+ function toggleDarkModeClass() {
+-  const dark = settings.get(SettingIds.DARKENED_MODE) === true;
++  const dark = settings.get(SettingIds.AUTO_THEME_MODE) ? (window.__te?.config?.systemDark ?? matchMedia('(prefers-color-scheme: dark)').matches) : settings.get(SettingIds.DARKENED_MODE) === true;
+   mountNode.classList.toggle(DARK_MODE_CLASS, dark);
+ }
+ 
+@@ -75,7 +75,7 @@ function toggleReducedMotionClass() {
+ 
+ function setAdoptedStyleSheet(cssList) {
+   const sheet = new CSSStyleSheet();
+-  sheet.replaceSync(cssList.join('\n'));
++  sheet.replaceSync([window.__te?.bttvCss || '', ...cssList].join('\n'));
+   shadowRoot.adoptedStyleSheets = [sheet];
+ }
+ 
+@@ -89,23 +89,7 @@ function injectMantineVariables() {
+   setAdoptedStyleSheet([baseCssVariables, darkCssVariables]);
+ }
+ 
+-function addStyleSheet() {
+-  const url = extension.url('betterttv.css', true);
+-  // Only a single stylesheet is supported: the load-gated reveal (and the reveal on each
+-  // reparent) assumes one stylesheet, so a second would race it and let the UI show unstyled.
+-  if (url == null) {
+-    return;
+-  }
+-
+-  const css = document.createElement('link');
+-  css.setAttribute('href', url);
+-  css.setAttribute('type', 'text/css');
+-  css.setAttribute('rel', 'stylesheet');
+-  // Reveal the UI only once its stylesheet has loaded, so it never renders unstyled. If the
+-  // stylesheet is missing or fails to load we leave it hidden rather than show an unstyled UI.
+-  css.addEventListener('load', showMountNode);
+-  shadowRoot.appendChild(css);
+-}
++function addStyleSheet() { showMountNode(); }
+ 
+ function update() {
+   root.render(
+@@ -158,3 +142,7 @@ settings.on(`changed.${SettingIds.DARKENED_MODE}`, toggleDarkModeClass);
+ onReducedMotionChange(toggleReducedMotionClass);
+ 
+ export default {mount, unmount, isMounted};
++
++settings.on('changed.autoThemeMode',toggleDarkModeClass);
++window.addEventListener('te-system-theme',toggleDarkModeClass);
++matchMedia('(prefers-color-scheme: dark)').addEventListener('change',toggleDarkModeClass);
+diff --git a/src/modules/split_chat/index.js b/src/modules/split_chat/index.js
+index 721a3cb..824aad7 100644
+--- a/src/modules/split_chat/index.js
++++ b/src/modules/split_chat/index.js
+@@ -7,8 +7,15 @@ const DEFAULT_LIGHT_THEME_COLOR = '#dcdcdc';
+ const DEFAULT_DARK_THEME_COLOR = '#1f1925';
+ 
+ class SplitChatModule {
++  constructor(){
++    const refresh=()=>document.querySelectorAll('.chat-line__message,.vod-message').forEach(el=>{if(el.__teSplitMessage)this.render(el,el.__teSplitMessage);});
++    settings.on('changed.splitChat',refresh);settings.on('changed.splitChatColor',refresh);
++  }
+   render(el, msgObject = {}) {
++    el.__teSplitMessage=msgObject;
+     if (settings.get(SettingIds.SPLIT_CHAT) === false) {
++      el.classList.remove('bttv-split-chat-alt-bg');
++      if(!el.classList.contains('bttv-highlighted'))el.style.backgroundColor='';
+       return;
+     }
+ 
+@@ -21,9 +28,7 @@ class SplitChatModule {
+       el.classList.add('bttv-split-chat-alt-bg');
+ 
+       const backgroundColor = settings.get(SettingIds.SPLIT_CHAT_COLOR);
+-      if (backgroundColor != null && !el.style.backgroundColor) {
+-        el.style.backgroundColor = backgroundColor;
+-      }
++      if(!el.classList.contains('bttv-highlighted'))el.style.backgroundColor=backgroundColor ?? this.getDefaultColor();
+     }
+ 
+     // only alternate for new messages
+@@ -33,7 +38,7 @@ class SplitChatModule {
+   }
+ 
+   getDefaultColor() {
+-    return document.querySelector('.tw-root--theme-dark') != null
++    return settings.get(SettingIds.DARKENED_MODE)===true || document.querySelector('.tw-root--theme-dark') != null
+       ? DEFAULT_DARK_THEME_COLOR
+       : DEFAULT_LIGHT_THEME_COLOR;
+   }
+diff --git a/src/utils/pro.js b/src/utils/pro.js
+index 0fdc622..84008d2 100644
+--- a/src/utils/pro.js
++++ b/src/utils/pro.js
+@@ -7,6 +7,7 @@ export function isUserPro(currentUser) {
+ }
+ 
+ export function getProSettingValue(settingId, defaultValue) {
++  if(settingId==='primaryColor')return settings.get(settingId) ?? defaultValue;
+   const {user: currentUser} = AuthStore.getState();
+ 
+   if (!isUserPro(currentUser)) {
+diff --git a/src/utils/sentry.js b/src/utils/sentry.js
+index ddac6f3..690e0a9 100644
+--- a/src/utils/sentry.js
++++ b/src/utils/sentry.js
+@@ -1,36 +1 @@
+-import {BrowserClient, getDefaultIntegrations, defaultStackParser, makeFetchTransport, Scope} from '@sentry/browser';
+-import {GIT_REV, NODE_ENV, SENTRY_URL} from '@/constants';
+-
+-const client = new BrowserClient({
+-  release: GIT_REV,
+-  environment: NODE_ENV,
+-  dsn: SENTRY_URL,
+-  transport: makeFetchTransport,
+-  stackParser: defaultStackParser,
+-  // keep the restrictive pre-v11 defaults (Sentry 11 collects user info, cookies and headers by default)
+-  dataCollection: {
+-    userInfo: false,
+-    cookies: false,
+-    httpHeaders: {
+-      request: {deny: ['forwarded', '-ip', 'remote-', 'via', '-user']},
+-      response: {deny: ['forwarded', '-ip', 'remote-', 'via', '-user']},
+-    },
+-    httpBodies: [],
+-  },
+-  integrations: getDefaultIntegrations({}).filter(
+-    (defaultIntegration) =>
+-      !['BrowserApiErrors', 'TryCatch', 'Breadcrumbs', 'Console', 'GlobalHandlers'].includes(defaultIntegration.name)
+-  ),
+-  beforeSend: (event) => {
+-    // only collect errors on production releases
+-    if (NODE_ENV !== 'production') {
+-      return null;
+-    }
+-
+-    return event;
+-  },
+-});
+-
+-const scope = new Scope();
+-scope.setClient(client);
+-export default scope;
++export default {captureException() {window.__te?.report('bttv','error');}, captureMessage() {}, setUser() {}, setTag() {}, setContext() {}};
+diff --git a/src/utils/window.js b/src/utils/window.js
+index cabcab9..d3a3b34 100644
+--- a/src/utils/window.js
++++ b/src/utils/window.js
+@@ -15,7 +15,7 @@ export function getPlatform() {
+     platform = PlatformTypes.YOUTUBE;
+   } else if (hostname === 'clips.twitch.tv') {
+     platform = PlatformTypes.TWITCH_CLIPS;
+-  } else if (hostname.endsWith('.twitch.tv')) {
++  } else if ((hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'twitch.tv' || hostname.endsWith('.twitch.tv'))) {
+     platform = PlatformTypes.TWITCH;
+   } else {
+     throw new Error('unsupported platform');
+@@ -33,7 +33,7 @@ export function getProvider() {
+ 
+   if (hostname.endsWith('.youtube.com')) {
+     provider = ProviderTypes.YOUTUBE;
+-  } else if (hostname.endsWith('.twitch.tv')) {
++  } else if ((hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'twitch.tv' || hostname.endsWith('.twitch.tv'))) {
+     provider = ProviderTypes.TWITCH;
+   } else {
+     throw new Error('unsupported provider');

@@ -1,0 +1,6 @@
+.tr-seekbar-area{position:absolute;left:0;right:0;bottom:4px;width:100%;max-width:100%;box-sizing:border-box;padding:0 12px;z-index:2}
+[data-a-target="player-controls"].te-timeline-visible .te-player-bottom-row,.player-controls.te-timeline-visible .te-player-bottom-row{position:relative;z-index:3;translate:0 calc(-1 * (var(--te-timeline-height,40px) + 8px))}
+.tr-seekbar{touch-action:none}
+.tr-live-label,.tr-live-dot{touch-action:manipulation}
+@media(max-width:600px){.tr-seekbar-preview{max-width:160px}}
+
