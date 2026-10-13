@@ -34,7 +34,7 @@
   function mountChatParity(){
     const config=window.__te?.config||{};
     document.documentElement.classList.toggle('te-hide-pinned',config.pinnedMessages===false);
-    const mobile=matchMedia('(max-width: 700px)').matches;
+    const mobile=window.matchMedia?.('(max-width: 700px)')?.matches ?? window.innerWidth<=700;
     const chat=document.querySelector('[data-a-target="chat-room-component-layout"],[data-test-selector="chat-room-component-layout"],.chat-room');
     if(!mobile||!chat)return;
     const targets=['[data-test-selector="community-points-summary"] button','[data-test-selector="community-points-button"]','[data-a-target="community-points-button"]','button[aria-label*="Channel Points"]','button[aria-label*="channel points"]'];
