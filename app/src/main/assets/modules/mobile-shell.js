@@ -30,9 +30,32 @@
       el.style.setProperty('display','none','important');
     });
   }
+  // Use Twitch's real redemption control; never invent points or rewards.
+  function mountChatParity(){
+    const config=window.__te?.config||{};
+    document.documentElement.classList.toggle('te-hide-pinned',config.pinnedMessages===false);
+    const mobile=window.matchMedia?.('(max-width: 700px)')?.matches ?? window.innerWidth<=700;
+    const chat=document.querySelector('[data-a-target="chat-room-component-layout"],[data-test-selector="chat-room-component-layout"],.chat-room');
+    if(!mobile||!chat)return;
+    const targets=['[data-test-selector="community-points-summary"] button','[data-test-selector="community-points-button"]','[data-a-target="community-points-button"]','button[aria-label*="Channel Points"]','button[aria-label*="channel points"]'];
+    const real=targets.map(q=>chat.querySelector(q)).find(el=>el&&el.offsetParent!==null&&!el.closest('#te-channel-points-shortcut'));
+    let shortcut=document.getElementById('te-channel-points-shortcut');
+    if(!real){shortcut?.remove();return;}
+    const footer=chat.querySelector('[data-a-target="chat-input"],[data-test-selector="chat-input"],textarea[placeholder*="message"],textarea[placeholder*="bericht"]')?.parentElement;
+    if(!footer){shortcut?.remove();return;}
+    if(!shortcut){
+      shortcut=document.createElement('button');shortcut.id='te-channel-points-shortcut';shortcut.type='button';
+      shortcut.setAttribute('aria-label','Channel Points');shortcut.title='Channel Points';
+      shortcut.textContent='✦';
+      shortcut.onclick=()=>{const target=targets.map(q=>chat.querySelector(q)).find(el=>el&&el!==shortcut);target?.click();};
+    }
+    if(shortcut.parentElement!==footer)footer.appendChild(shortcut);
+  }
+  window.__te=window.__te||{};
+  window.__te.refreshChatParity=mountChatParity;
   let timer=0;
-  function queue(){if(!timer)timer=setTimeout(()=>{timer=0;scan();},100);}
-  function start(){scan();const observer=new MutationObserver(queue);observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true});window.addEventListener('pagehide',()=>{observer.disconnect();clearTimeout(timer);},{once:true});}
+  function queue(){if(!timer)timer=setTimeout(()=>{timer=0;scan();mountChatParity();},100);}
+  function start(){scan();mountChatParity();const observer=new MutationObserver(queue);observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true});window.addEventListener('pagehide',()=>{observer.disconnect();clearTimeout(timer);},{once:true});}
   if(document.documentElement)start();else document.addEventListener('DOMContentLoaded',start,{once:true});
 })();
 

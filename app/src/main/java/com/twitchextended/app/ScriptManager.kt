@@ -23,10 +23,11 @@ class ScriptManager(private val context: Context) {
             val config=JSONObject()
             config.put("systemDark",context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES)
             for(id in listOf("vaft","rewind","bttv","promos"))config.put(id,enabled(id))
-            for(id in listOf("background","desktop","pip"))config.put(id,prefs.getBoolean(id,id=="pip"))
+            for(id in listOf("background","desktop","pip","pinnedMessages"))config.put(id,prefs.getBoolean(id,id=="pip" || id=="pinnedMessages"))
             append("window.__te.config=$config;window.__te.setSetting=(id,enabled)=>window.TeSettings?.postMessage(JSON.stringify({id,enabled}));\n")
             appendModule("settings",asset("extension-settings.js"),this)
             appendModule("mobile",asset("mobile-shell.js"),this)
+            append("window.__te.style(${JSONObject.quote(asset("mobile.css"))});\n")
             append("\nwindow.__te.background=${prefs.getBoolean("background", false)};\n")
             // VAFT first: Rewind wraps the already patched worker. Reversing this order
             // permits VAFT's prototype cleanup to remove another worker wrapper.
