@@ -1,0 +1,11 @@
+.gradle/
+.kotlin/
+node_modules/
+.npm-cache/
+**/build/
+local.properties
+*.jks
+keystore.properties
+upstream/
+dist/
+*-log.txt
