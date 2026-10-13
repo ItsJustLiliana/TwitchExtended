@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
             if(main)try{
                 val data=JSONObject(message.data?:"{}")
                 val id=data.optString("id")
-                if(id in setOf("vaft","rewind","bttv","promos","background","desktop","pip") && data.get("enabled") is Boolean){
+                if(id in setOf("vaft","rewind","bttv","promos","background","desktop","pip","pinnedMessages") && data.get("enabled") is Boolean){
                     prefs.edit().putBoolean(id,data.getBoolean("enabled")).apply()
                     scripts.install(web);applyUserAgent();web.reload()
                 }
@@ -166,6 +166,7 @@ class MainActivity : ComponentActivity() {
         toggle("vaft","VAFT Adblock · 37.0.0",reload=true);toggle("rewind","Twitch Rewind · 1.0.0",reload=true);toggle("promos","Hide Ad-Free / Turbo · 1.1.0",reload=true)
         body.addView(text("Initialization does not prove ads were blocked. Rewind requires available VOD history."))
         section("Playback");toggle("pip","Automatic Picture-in-Picture");toggle("background","Background audio",false);toggle("desktop","Desktop website",false,true)
+        section("Chat");toggle("pinnedMessages","Vastgepinde moderatorberichten",true,true)
         section("Appearance")
         body.addView(button("Theme: ${prefs.getString("theme","system")}"){AlertDialog.Builder(this).setTitle("Theme").setItems(arrayOf("System","Dark","Light")){_,which->prefs.edit().putString("theme",arrayOf("system","dark","light")[which]).apply();column.setBackgroundColor(bg);dialog.dismiss();showSettings()}.show()})
         section("Updates")
