@@ -39,7 +39,8 @@
     }
     if(button.parentElement!==host)host.appendChild(button);
     button.style.cssText='display:inline-flex;align-items:center;justify-content:center;width:40px;min-width:40px;max-width:40px;height:40px;flex:0 0 40px;margin:0;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer';
-    host.style.setProperty('display','flex','important');host.style.setProperty('align-items','center','important');host.style.setProperty('justify-content','flex-end','important');host.style.setProperty('gap','4px','important');
+    // Preserve Twitch's own header layout; setting display:flex on an arbitrary
+    // nav/header causes alignment regressions on narrow phone screens.
     const links=Array.from(host.querySelectorAll('a,button'));
     const identity=metadata&&host.contains(metadata)?metadata:links.find(el=>el.matches('a[href="/"],a[interactioncontent="logo"]'))||links.find(el=>el.querySelector('img'));
     let identitySlot=identity;
@@ -47,13 +48,13 @@
     identitySlot?.style.setProperty('margin-right','auto','important');
     for(const control of links){
       if(control===identity||control.contains(identity)||control===button)continue;
-      // Remove spacing on the real nested action containers, without moving React nodes.
-      for(let parent=control.parentElement;parent&&parent!==host&&!parent.contains(identity);parent=parent.parentElement){
-        parent.style.setProperty('display','contents','important');
-      }
+      // Do not flatten React-owned wrappers: their sizes and click targets belong to Twitch.
       const iconOnly=!control.textContent.trim();
-      control.style.setProperty('margin','0','important');control.style.setProperty('height','40px','important');control.style.setProperty('flex','0 0 auto','important');
-      control.style.setProperty('min-width',iconOnly?'40px':'0','important');control.style.setProperty('width',iconOnly?'40px':'auto','important');control.style.setProperty('max-width',iconOnly?'40px':'none','important');control.style.setProperty('padding',iconOnly?'0':'0 8px','important');
+      if(iconOnly && matchMedia('(max-width: 700px)').matches){
+        control.style.setProperty('min-width','40px','important');
+        control.style.setProperty('min-height','40px','important');
+        control.style.setProperty('box-sizing','border-box','important');
+      }
     }
   }
   function queue(){if(!timer)timer=setTimeout(()=>{timer=0;mount();},150);}
