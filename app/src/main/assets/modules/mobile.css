@@ -4,3 +4,15 @@
 .tr-live-label,.tr-live-dot{touch-action:manipulation}
 @media(max-width:600px){.tr-seekbar-preview{max-width:160px}}
 
+
+/* Mobile controls use matching tap areas without rewriting Twitch layout. */
+@media(max-width:700px){
+  #te-settings-nav{width:40px!important;height:40px!important;flex:0 0 40px!important;padding:8px!important;box-sizing:border-box}
+  #te-settings-nav svg{width:24px;height:24px}
+  #te-channel-points-shortcut{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;min-width:36px;flex:0 0 36px;border:0;border-radius:6px;background:#9146ff;color:#fff;font-size:24px;cursor:pointer;margin:4px}
+  [data-a-target="channel-header"] button,[data-a-target="top-nav-container"] button{box-sizing:border-box;flex-shrink:0}
+}
+.te-hide-pinned [data-test-selector="pinned-chat-message"],
+.te-hide-pinned [data-a-target="pinned-chat-message"],
+.te-hide-pinned [data-test-selector="chat-pinned-message"],
+.te-hide-pinned .chat-pinned-message{display:none!important}
